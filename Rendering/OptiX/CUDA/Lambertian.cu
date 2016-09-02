@@ -24,12 +24,7 @@ rtDeclareVariable( IntersectionRecord, irec, attribute irec, );
 
 RT_PROGRAM void LambertianClosestHit()
 {
-    const float3 N = faceforward( irec.Ng, -ray.direction, irec.Ng );
-    /*
-    prd.result = N*0.5f + make_float3(0.5f); 
-    return;
-    */
-
+    const float3 N = faceforward( irec.N, -ray.direction, irec.Ng );
     const float3 P  = ray.origin + t_hit * ray.direction;
     const float3 Kd = make_float3( 0.7f, 0.7f, 0.7f );
 

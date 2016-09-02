@@ -22,5 +22,6 @@ struct OcclusionPRD
 
 struct IntersectionRecord 
 {
+    float3  N;
     float3  Ng;
 };

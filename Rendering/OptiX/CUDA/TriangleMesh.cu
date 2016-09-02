@@ -8,6 +8,7 @@ using namespace optix;
 
 
 rtBuffer<float3>    vertices;
+rtBuffer<float3>    normals;
 rtBuffer<int3>      triangles;
 
 rtDeclareVariable(optix::Ray, ray, rtCurrentRay, );
@@ -31,6 +32,16 @@ RT_PROGRAM void TriangleMeshIntersection( int prim_idx )
         if(  rtPotentialIntersection( t ) )
         {
             irec.Ng = normalize( n );
+            if( normals.size() == 0 ) {
+                irec.N = irec.Ng; 
+            }
+            else
+            {
+                const float3 n0 = normals[ v_idx.x ];
+                const float3 n1 = normals[ v_idx.y ];
+                const float3 n2 = normals[ v_idx.z ];
+                irec.N = normalize( n1*beta + n2*gamma + n0*(1.0f-beta-gamma) );
+            }
             rtReportIntersection( 0 );
         }
     }

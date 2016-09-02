@@ -92,24 +92,29 @@ public:
 
 
   //------------------------------------------------------------------------------
-  /*
-  void VToOPointNormals(
-    vtkDataArray *vNormals,
-    osp::vec3f *&normals)
-  {
-      int numNormals = vNormals->GetNumberOfTuples();
-      normals = new osp::vec3f[numNormals];
-      for (int i = 0; i < numNormals; i++)
-      {
-          double *vNormal = vNormals->GetTuple(i);
-             normals[i] = osp::vec3f {
-             static_cast<float>(vNormal[0]),
-             static_cast<float>(vNormal[1]),
-             static_cast<float>(vNormal[2])
-             };
-      }
-  }
-  */
+optix::Buffer vtkDataArrayToBuffer( vtkDataArray* vdata, optix::Context ctx )
+{
+
+    const int num_tuples = vdata ? vdata->GetNumberOfTuples() : 0;
+    optix::Buffer buff = ctx->createBuffer(
+            RT_BUFFER_INPUT,
+            RT_FORMAT_FLOAT3,
+            num_tuples
+            );
+
+    optix::float3* buff_data = reinterpret_cast<optix::float3*>( buff->map() );
+    for (int i = 0; i < num_tuples; i++)
+    {
+        const double* tuple = vdata->GetTuple(i);
+        buff_data[i] = optix::make_float3 (
+            static_cast<float>(tuple[0]),
+            static_cast<float>(tuple[1]),
+            static_cast<float>(tuple[2])
+            );
+    }
+    buff->unmap();
+    return buff;
+}
 
   //------------------------------------------------------------------------------
 
@@ -393,6 +398,7 @@ float MapThroughPWF(double in, vtkPiecewiseFunction *scaleFunction)
 void RenderAsTriangles(
         optix::Context ctx,
         optix::Buffer vert_buffer,
+        optix::Buffer norm_buffer,
         std::vector<unsigned int> &indexArray,
         std::vector<unsigned int> &rIndexArray,
         vtkOptiXPolyDataMapperNode::Geom* my_geom
@@ -430,6 +436,7 @@ void RenderAsTriangles(
                 )
             );
     geometry[ "vertices"  ]->setBuffer( vert_buffer );
+    geometry[ "normals"   ]->setBuffer( norm_buffer );
     geometry[ "triangles" ]->setBuffer( tri_buffer );
 
     optix::Material matl = ctx->createMaterial();
@@ -446,8 +453,8 @@ void RenderAsTriangles(
     my_geom->Add( ctx->createGeometryInstance( geometry, &matl, &matl+1 ) );
 }
 
+/*
   //----------------------------------------------------------------------------
-  /*
   OSPGeometry RenderAsTriangles(OSPData vertices,
                                 std::vector<unsigned int> &indexArray,
                                 std::vector<unsigned int> &rIndexArray,
@@ -466,67 +473,67 @@ void RenderAsTriangles(
                                 OSPModel oModel,
                                 OSPRenderer oRenderer
                                 )
-  {
+{
     OSPGeometry ospMesh = ospNewGeometry("trianglemesh");
     ospSetData(ospMesh, "position", vertices);
 
     size_t numTriangles = indexArray.size() / 3;
     osp::vec3i *triangles = new osp::vec3i[numTriangles];
     for (size_t i = 0, mi = 0; i < numTriangles; i++, mi += 3)
-      {
-      triangles[i] = osp::vec3i{static_cast<int>(indexArray[mi + 0]),
-                                static_cast<int>(indexArray[mi + 1]),
-                                static_cast<int>(indexArray[mi + 2])};
-      }
+    {
+        triangles[i] = osp::vec3i{static_cast<int>(indexArray[mi + 0]),
+            static_cast<int>(indexArray[mi + 1]),
+            static_cast<int>(indexArray[mi + 2])};
+    }
     OSPData index = ospNewData(numTriangles, OSP_INT3, &triangles[0]);
     delete[] triangles;
     ospSetData(ospMesh, "index", index);
 
     OSPData _normals = NULL;
     if (numNormals)
-      {
-      _normals = ospNewData(numNormals, OSP_FLOAT3, &normals[0]);
-      ospSetData(ospMesh, "vertex.normal", _normals);
-      }
+    {
+        _normals = ospNewData(numNormals, OSP_FLOAT3, &normals[0]);
+        ospSetData(ospMesh, "vertex.normal", _normals);
+    }
 
     //send the texture map and texture coordiantes over
     bool _hastm = false;
     osp::vec2f *tc = NULL;
     if (numTextureCoordinates || numPointValueTextureCoords)
-      {
-      _hastm = true;
+    {
+        _hastm = true;
 
-      if (numPointValueTextureCoords)
+        if (numPointValueTextureCoords)
         {
-        //using 1D texture for point value LUT
-        tc = new osp::vec2f[numPointValueTextureCoords];
-        for (size_t i = 0; i < numPointValueTextureCoords; i++)
-          {
-          tc[i] = osp::vec2f{pointValueTextureCoords[i],0};
-          }
-        OSPData tcs = ospNewData(numPointValueTextureCoords, OSP_FLOAT2, &tc[0]);
-        ospSetData(ospMesh, "vertex.texcoord", tcs);
+            //using 1D texture for point value LUT
+            tc = new osp::vec2f[numPointValueTextureCoords];
+            for (size_t i = 0; i < numPointValueTextureCoords; i++)
+            {
+                tc[i] = osp::vec2f{pointValueTextureCoords[i],0};
+            }
+            OSPData tcs = ospNewData(numPointValueTextureCoords, OSP_FLOAT2, &tc[0]);
+            ospSetData(ospMesh, "vertex.texcoord", tcs);
         }
-      else if (numTextureCoordinates)
+        else if (numTextureCoordinates)
         {
-        //2d texture mapping
-        tc = new osp::vec2f[numTextureCoordinates/2];
-        float *itc = textureCoordinates;
-        for (size_t i = 0; i < numTextureCoordinates; i+=2)
-          {
-          float t1,t2;
-          t1 = *itc;
-          itc++;
-          t2 = *itc;
-          itc++;
-          tc[i/2] = osp::vec2f{t1,t2};
-          }
-        OSPData tcs = ospNewData(numTextureCoordinates/2, OSP_FLOAT2, &tc[0]);
-        ospSetData(ospMesh, "vertex.texcoord", tcs);
+            //2d texture mapping
+            tc = new osp::vec2f[numTextureCoordinates/2];
+            float *itc = textureCoordinates;
+            for (size_t i = 0; i < numTextureCoordinates; i+=2)
+            {
+                float t1,t2;
+                t1 = *itc;
+                itc++;
+                t2 = *itc;
+                itc++;
+                tc[i/2] = osp::vec2f{t1,t2};
+            }
+            OSPData tcs = ospNewData(numTextureCoordinates/2, OSP_FLOAT2, &tc[0]);
+            ospSetData(ospMesh, "vertex.texcoord", tcs);
         }
-      OSPMaterial ospMaterial = vtkosp::VTKToOSPTexture(vColorTextureMap,oRenderer);
-      ospSetMaterial(ospMesh, ospMaterial);
-      }
+        OSPMaterial ospMaterial = vtkosp::VTKToOSPTexture(vColorTextureMap,oRenderer);
+        ospSetMaterial(ospMesh, ospMaterial);
+    }
     delete[] tc;
 
     //send over cell colors, point colors or whole actor color
@@ -534,28 +541,28 @@ void RenderAsTriangles(
     OSPData _PointColors = NULL;
     int *ids = NULL;
     if (!_hastm)
-      {
-      if (numCellMaterials)
+    {
+        if (numCellMaterials)
         {
-        ids = new int[numTriangles];
-        for (size_t i = 0; i < numTriangles; i++)
-          {
-          ids[i] = rIndexArray[i*3+0];
-          }
-        _cmats = ospNewData(numTriangles, OSP_INT, &ids[0]);
-        ospSetData(ospMesh, "prim.materialID", _cmats);
-        ospSetData(ospMesh, "materialList", CellMaterials);
+            ids = new int[numTriangles];
+            for (size_t i = 0; i < numTriangles; i++)
+            {
+                ids[i] = rIndexArray[i*3+0];
+            }
+            _cmats = ospNewData(numTriangles, OSP_INT, &ids[0]);
+            ospSetData(ospMesh, "prim.materialID", _cmats);
+            ospSetData(ospMesh, "materialList", CellMaterials);
         }
-      else if (numPointColors)
+        else if (numPointColors)
         {
-        _PointColors = ospNewData(numPointColors, OSP_FLOAT4, &PointColors[0]);
-        ospSetData(ospMesh, "vertex.color", _PointColors);
+            _PointColors = ospNewData(numPointColors, OSP_FLOAT4, &PointColors[0]);
+            ospSetData(ospMesh, "vertex.color", _PointColors);
         }
-      else
+        else
         {
-        ospSetMaterial(ospMesh, actorMaterial);
+            ospSetMaterial(ospMesh, actorMaterial);
         }
-      }
+    }
 
     ospAddGeometry(oModel, ospMesh);
     ospCommit(ospMesh);
@@ -566,7 +573,7 @@ void RenderAsTriangles(
     ospRelease(_cmats);
     delete[] ids;
     return ospMesh;
-  }
+}
 */
 
 //============================================================================
@@ -657,9 +664,17 @@ void vtkOptiXPolyDataMapperNode::RenderPoly(
             default:
             {
                 std::cerr << "\tCreating poly mesh" << std::endl;
+
+                vtkDataArray* vNormals = 0; 
+                if( property->GetInterpolation() != VTK_FLAT )
+                {
+                    vNormals = poly->GetPointData()->GetNormals();
+                }
+                optix::Buffer norm_buffer = vtkDataArrayToBuffer( vNormals, ctx ); 
                 RenderAsTriangles(
                         ctx,
                         vert_buffer,
+                        norm_buffer,
                         triangle_index,
                         triangle_reverse,
                         this->MyGeom
