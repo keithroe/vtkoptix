@@ -20,6 +20,7 @@ CUDA_COMPILE_PTX( ptx_files
     CUDA/draw_color.cu
     CUDA/Lambertian.cu
     CUDA/PerspectiveCamera.cu
+    CUDA/Phong.cu
     CUDA/TriangleMesh.cu
     )
 

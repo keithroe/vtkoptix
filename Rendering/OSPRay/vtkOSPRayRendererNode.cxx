@@ -277,9 +277,13 @@ void vtkOSPRayRendererNode::Render(bool prepass)
 {
   if (prepass)
     {
+
     OSPRenderer oRenderer = NULL;
     if (!this->ORenderer)
       {
+        vtkRenderer *aren = vtkRenderer::SafeDownCast(this->Renderable);
+        std::cerr << "\tMaxFrames: " << vtkOSPRayRendererNode::GetMaxFrames( aren ) << std::endl;
+        std::cerr << "\tSPP      : " << vtkOSPRayRendererNode::GetSamplesPerPixel( aren ) << std::endl;
       ospRelease((osp::Renderer*)this->ORenderer);
       oRenderer = (osp::Renderer*)ospNewRenderer("scivis");
       this->ORenderer = oRenderer;

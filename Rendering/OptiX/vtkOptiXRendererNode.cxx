@@ -480,6 +480,9 @@ void vtkOptiXRendererNode::Render(bool prepass)
     {
         std::cerr << "==================================================================" << std::endl;
         std::cerr << "RendererNode prepass" << std::endl;
+        vtkRenderer *aren = vtkRenderer::SafeDownCast(this->Renderable);
+        std::cerr << "\tMaxFrames: " << vtkOptiXRendererNode::GetMaxFrames( aren ) << std::endl;
+        std::cerr << "\tSPP      : " << vtkOptiXRendererNode::GetSamplesPerPixel( aren ) << std::endl;
         
         vtkRenderer *ren = vtkRenderer::SafeDownCast(this->GetRenderable());
         int *tmp = ren->GetSize();

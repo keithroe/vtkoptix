@@ -397,6 +397,7 @@ float MapThroughPWF(double in, vtkPiecewiseFunction *scaleFunction)
 
 void RenderAsTriangles(
         optix::Context ctx,
+        optix::Material matl,
         optix::Buffer vert_buffer,
         optix::Buffer norm_buffer,
         std::vector<unsigned int> &indexArray,
@@ -439,17 +440,6 @@ void RenderAsTriangles(
     geometry[ "normals"   ]->setBuffer( norm_buffer );
     geometry[ "triangles" ]->setBuffer( tri_buffer );
 
-    optix::Material matl = ctx->createMaterial();
-    matl->setClosestHitProgram( 0, ctx->createProgramFromPTXFile(
-                VTK_OPTIX_PTX_DIR + "/cuda_compile_ptx_generated_Lambertian.cu.ptx",
-                "LambertianClosestHit"
-                )
-            );
-    matl->setAnyHitProgram( 1, ctx->createProgramFromPTXFile(
-                VTK_OPTIX_PTX_DIR + "/cuda_compile_ptx_generated_Lambertian.cu.ptx",
-                "LambertianAnyHit"
-                )
-            );
     my_geom->Add( ctx->createGeometryInstance( geometry, &matl, &matl+1 ) );
 }
 
@@ -630,7 +620,9 @@ void vtkOptiXPolyDataMapperNode::RenderPoly(
     vert_buffer->unmap();
     vertices.clear();
     
+    //
     //make connectivity
+    //
     std::vector<unsigned int> vertex_index;
     std::vector<unsigned int> vertex_reverse;
     std::vector<unsigned int> line_index;
@@ -645,7 +637,41 @@ void vtkOptiXPolyDataMapperNode::RenderPoly(
             triangle_index, triangle_reverse,
             strip_index, strip_reverse);
 
-    //create an ospray mesh for the polygon cells
+    //
+    //per actor material
+    //
+    optix::Material matl = ctx->createMaterial();
+    matl->setClosestHitProgram( 0, ctx->createProgramFromPTXFile(
+                //VTK_OPTIX_PTX_DIR + "/cuda_compile_ptx_generated_Lambertian.cu.ptx",
+                VTK_OPTIX_PTX_DIR + "/cuda_compile_ptx_generated_Phong.cu.ptx",
+                "LambertianClosestHit"
+                )
+            );
+    matl->setAnyHitProgram( 1, ctx->createProgramFromPTXFile(
+                //VTK_OPTIX_PTX_DIR + "/cuda_compile_ptx_generated_Lambertian.cu.ptx",
+                VTK_OPTIX_PTX_DIR + "/cuda_compile_ptx_generated_Phong.cu.ptx",
+                "LambertianAnyHit"
+                )
+            );
+    const optix::float3 Kd = optix::make_float3( 
+        static_cast<float>(property->GetDiffuseColor()[0]*property->GetDiffuse()),
+        static_cast<float>(property->GetDiffuseColor()[1]*property->GetDiffuse()),
+        static_cast<float>(property->GetDiffuseColor()[2]*property->GetDiffuse())
+        );
+    const float Ns= static_cast<float>(property->GetSpecularPower());
+    //const float specAdjust = 2.0f/(2.0f+Ns); //since OSP 0.10.0
+    const optix::float3 Ks = optix::make_float3( 
+        static_cast<float>(property->GetSpecularColor()[0]* property->GetSpecular()/**specAdjust*/),
+        static_cast<float>(property->GetSpecularColor()[1]* property->GetSpecular()/**specAdjust*/),
+        static_cast<float>(property->GetSpecularColor()[2]* property->GetSpecular()/**specAdjust*/)
+        );
+    matl[ "Kd" ]->setFloat( Kd );
+    matl[ "Ks" ]->setFloat( Ks );
+    matl[ "Ns" ]->setFloat( Ns );
+
+    //
+    //create a mesh for the polygon cells
+    //
     if (triangle_index.size())
     {
         //format depends on representation style
@@ -673,39 +699,13 @@ void vtkOptiXPolyDataMapperNode::RenderPoly(
                 optix::Buffer norm_buffer = vtkDataArrayToBuffer( vNormals, ctx ); 
                 RenderAsTriangles(
                         ctx,
+                        matl,
                         vert_buffer,
                         norm_buffer,
                         triangle_index,
                         triangle_reverse,
                         this->MyGeom
                         );
-                /*
-                osp::vec3f *normals = NULL;
-                int numNormals = 0;
-                if (property->GetInterpolation() != VTK_FLAT)
-                {
-                    vtkDataArray *vNormals = poly->GetPointData()->GetNormals();
-                    if (vNormals)
-                    {
-                        vtkosp::VToOPointNormals
-                            (vNormals, normals);
-                        numNormals = vNormals->GetNumberOfTuples();
-                    }
-                }
-                myMeshes
-                    ->Add(vtkosp::RenderAsTriangles(position,
-                                triangle_index, triangle_reverse,
-                                oMaterial,
-                                numNormals, normals,
-                                vColorTextureMap,
-                                numTextureCoordinates, textureCoordinates,
-                                numCellMaterials, cellMaterials,
-                                numPointColors, pointColors,
-                                numPointValueTextureCoords, pointValueTextureCoords,
-                                oModel, oRenderer
-                                ));
-                delete[] normals;
-                */
             }
         }
     }
