@@ -56,30 +56,31 @@ RT_PROGRAM void LambertianClosestHit()
 
         const float N_dot_L = optix::dot( L, N );
 
-        //
-        // Calculation occlusion
-        //
         float3 light_attenuation = make_float3( 0.0f );
         if( N_dot_L > 0.0f )
         {
+            //
+            // Calculation occlusion
+            //
             OcclusionPRD shadow_prd;
             shadow_prd.occlusion = make_float3( 1.0f );
             optix::Ray shadow_ray = optix::make_Ray( P, L, OCCLUSION_RAY_TYPE, 0.001f, Ldist );
             rtTrace( top_object, shadow_ray, shadow_prd );
             light_attenuation = shadow_prd.occlusion;
+
+            //
+            // Calculate local lighting 
+            //
+            if( fmaxf(light_attenuation) > 0.0f )
+            {
+                //const float3 H = optix::normalize( L - ray.direction );
+                //const float  N_dot_H = optix::dot( N, H );
+                const float3 R = optix::reflect( ray.direction, N );
+                const float  L_dot_R = fmaxf( optix::dot( L, R ), 0.0f );;
+                color += ( Kd*N_dot_L + Ks*powf( L_dot_R, Ns ) ) * Lcolor * light_attenuation;
+            }
         }
 
-        //
-        // Calculate local lighting 
-        //
-        if( fmaxf(light_attenuation) > 0.0f )
-        {
-            //const float3 H = optix::normalize( L - ray.direction );
-            //const float  N_dot_H = optix::dot( N, H );
-            const float3 R = optix::reflect( ray.direction, N );
-            const float  L_dot_R = fmaxf( optix::dot( L, R ), 0.0f );;
-            color += ( Kd*N_dot_L + Ks*powf( L_dot_R, Ns ) ) * Lcolor * light_attenuation;
-        }
 
     }
     prd.result = color; 
